@@ -17,13 +17,15 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: order-service:v2
+          image: order-service:v3
           imagePullPolicy: Never
           ports:
             - containerPort: 8000
           env:
             - name: APP_VERSION
-              value: "v2"
+              value: "v3"
+            - name: INJECT_FAILURE
+              value: "true"
           readinessProbe:
             httpGet:
               path: /healthz
@@ -49,3 +51,9 @@ spec:
       previewService: order-service-preview
       autoPromotionEnabled: false
       scaleDownDelaySeconds: 30
+      prePromotionAnalysis:
+        templates:
+          - templateName: error-rate-check
+        args:
+          - name: service-name
+            value: order-service-preview
