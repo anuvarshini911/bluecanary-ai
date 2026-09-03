@@ -1,0 +1,67 @@
+{
+  "dashboard": {
+    "uid": "bluecanary-order-service",
+    "title": "BlueCanary AI - order-service",
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 2,
+    "refresh": "10s",
+    "time": { "from": "now-15m", "to": "now" },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Traffic Split: Active vs Preview (req/s)",
+        "type": "timeseries",
+        "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+        "targets": [
+          { "expr": "sum(rate(http_requests_total{service=\"order-service-active\"}[1m]))", "legendFormat": "active", "refId": "A" },
+          { "expr": "sum(rate(http_requests_total{service=\"order-service-preview\"}[1m]))", "legendFormat": "preview", "refId": "B" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+      },
+      {
+        "id": 2,
+        "title": "Error Rate % (Active vs Preview)",
+        "type": "timeseries",
+        "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+        "targets": [
+          { "expr": "100 * sum(rate(http_requests_total{service=\"order-service-active\",status=~\"5..\"}[1m])) / sum(rate(http_requests_total{service=\"order-service-active\"}[1m]))", "legendFormat": "active error %", "refId": "A" },
+          { "expr": "100 * sum(rate(http_requests_total{service=\"order-service-preview\",status=~\"5..\"}[1m])) / sum(rate(http_requests_total{service=\"order-service-preview\"}[1m]))", "legendFormat": "preview error %", "refId": "B" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] }
+      },
+      {
+        "id": 3,
+        "title": "P95 Latency (Active vs Preview)",
+        "type": "timeseries",
+        "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+        "targets": [
+          { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"order-service-active\"}[1m])) by (le))", "legendFormat": "active p95", "refId": "A" },
+          { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"order-service-preview\"}[1m])) by (le))", "legendFormat": "preview p95", "refId": "B" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+      },
+      {
+        "id": 4,
+        "title": "Canary Weight Progression (order-service-canary)",
+        "type": "timeseries",
+        "gridPos": { "h": 9, "w": 12, "x": 0, "y": 18 },
+        "targets": [
+          { "expr": "sum(rate(http_requests_total{service=\"order-service-canary\"}[1m]))", "legendFormat": "canary req/s", "refId": "A" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+      },
+      {
+        "id": 5,
+        "title": "Total Request Volume - All Services (event log view)",
+        "type": "timeseries",
+        "gridPos": { "h": 9, "w": 12, "x": 12, "y": 18 },
+        "targets": [
+          { "expr": "sum(increase(http_requests_total{service=~\"order-service.*\"}[1m])) by (service)", "legendFormat": "{{service}}", "refId": "A" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      }
+    ]
+  },
+  "overwrite": true
+}
