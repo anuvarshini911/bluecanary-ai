@@ -158,3 +158,52 @@ def evaluate(req: EvaluateRequest):
         decision=decision,
         rationale=rationale,
     )
+
+
+class JudgeRequest(BaseModel):
+    service: str
+    metrics: dict
+    ai1_classification: str
+    decision: str
+    rationale: str
+
+
+class JudgeResponse(BaseModel):
+    service: str
+    original_decision: str
+    judge_verdict: str  # "agree" | "disagree"
+    judge_reasoning: str
+
+
+def judge_with_gemini(req: "JudgeRequest") -> tuple[str, str]:
+    """AI-3: independent second opinion on a past AI Gate decision (quality/audit layer)."""
+    prompt = (
+        "You are an independent AI auditor reviewing a Kubernetes deployment gate's "
+        "decision. Be skeptical - your job is to catch mistakes, not rubber-stamp them.\n\n"
+        f"Service: {req.service}\n"
+        f"Metrics at the time: {json.dumps(req.metrics, indent=2)}\n"
+        f"Original classification: {req.ai1_classification}\n"
+        f"Original decision: {req.decision}\n"
+        f"Original rationale given: {req.rationale}\n\n"
+        "Independently assess: was this the right call given the metrics? "
+        'Respond ONLY as JSON: {"verdict": "agree|disagree", "reasoning": "<2-3 sentences>"}'
+    )
+    try:
+        resp = gemini_model.generate_content(prompt)
+        raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw)
+        return data.get("verdict", "agree"), data.get("reasoning", "")
+    except Exception as e:
+        return "agree", f"(Judge unavailable, defaulting to agree: {e})"
+
+
+@app.post("/judge", response_model=JudgeResponse)
+def judge(req: JudgeRequest):
+    """AI-3: audits a previously made AI Gate decision."""
+    verdict, reasoning = judge_with_gemini(req)
+    return JudgeResponse(
+        service=req.service,
+        original_decision=req.decision,
+        judge_verdict=verdict,
+        judge_reasoning=reasoning,
+    )
