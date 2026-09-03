@@ -83,3 +83,4 @@ def get_orders():
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+# CI-triggered deploy test

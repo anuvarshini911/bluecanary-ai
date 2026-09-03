@@ -1,0 +1,31 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/order-service/**'
+      - 'k8s/order-service/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build order-service image
+        run: |
+          cd apps/order-service
+          docker build -t order-service:ci-${{ github.sha }} .
+
+      - name: Load image into Minikube
+        run: minikube image load order-service:ci-${{ github.sha }}
+
+      - name: Update Rollout image
+        run: |
+          kubectl set image rollout/order-service order-service=order-service:ci-${{ github.sha }} -n default
+
+      - name: Watch rollout status
+        run: |
+          kubectl argo rollouts get rollout order-service -n default
+          echo "Rollout triggered by GitHub Actions (commit ${{ github.sha }}). Manual promotion still required per blue-green gate."
