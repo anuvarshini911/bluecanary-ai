@@ -23,7 +23,7 @@ jobs:
 
       - name: Update Rollout image
         run: |
-          kubectl set image rollout/order-service order-service=order-service:ci-${{ github.sha }} -n default
+          kubectl argo rollouts set image order-service order-service=order-service:ci-${{ github.sha }} -n default
 
       - name: Watch rollout status
         run: |
