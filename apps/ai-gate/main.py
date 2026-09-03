@@ -262,3 +262,52 @@ def generate_test_scenarios(req: SyntheticScenariosRequest):
     """AI-5: generates synthetic metric scenarios to test AI-1's classification range."""
     scenarios = generate_synthetic_scenarios(req.count)
     return SyntheticScenariosResponse(scenarios=scenarios)
+
+
+class NotifyRequest(BaseModel):
+    service: str
+    metrics: dict
+    ai1_classification: str
+    decision: str
+    rationale: str = ""
+    judge_verdict: str = ""
+
+
+class NotifyResponse(BaseModel):
+    service: str
+    notification: str
+
+
+def generate_notification(req: "NotifyRequest") -> str:
+    """AI-4: consolidates AI-1/AI-2/AI-3 output into one stakeholder-facing
+    notification message (e.g. for a Slack/team channel), using Groq for speed."""
+    prompt = (
+        "You write concise deployment notification messages for a team Slack channel. "
+        "Given this deployment gate result, write ONE short notification (3-4 lines max, "
+        "no markdown headers, plain conversational text a human would actually post):\n\n"
+        f"Service: {req.service}\n"
+        f"Metrics: {json.dumps(req.metrics)}\n"
+        f"Classification: {req.ai1_classification}\n"
+        f"Decision: {req.decision}\n"
+        f"Rationale: {req.rationale or 'n/a'}\n"
+        f"Independent judge verdict: {req.judge_verdict or 'not yet reviewed'}\n\n"
+        "Include an appropriate emoji (✅ for promote, 🔴 for rollback) and keep it "
+        "brief and scannable."
+    )
+    try:
+        resp = groq_client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=200,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        return f"(Notification generation unavailable: {e})"
+
+
+@app.post("/notify", response_model=NotifyResponse)
+def notify(req: NotifyRequest):
+    """AI-4: generates a consolidated stakeholder notification for a deployment decision."""
+    notification = generate_notification(req)
+    return NotifyResponse(service=req.service, notification=notification)
