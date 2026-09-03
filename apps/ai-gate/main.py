@@ -207,3 +207,58 @@ def judge(req: JudgeRequest):
         judge_verdict=verdict,
         judge_reasoning=reasoning,
     )
+
+
+class SyntheticScenariosRequest(BaseModel):
+    count: int = 5
+
+
+class SyntheticScenariosResponse(BaseModel):
+    scenarios: list[dict]
+
+
+def generate_synthetic_scenarios(count: int) -> list[dict]:
+    """AI-5: uses Groq to generate realistic/adversarial test metric scenarios
+    for stress-testing the AI-1 classifier beyond manually-crafted cases."""
+    prompt = (
+        f"Generate exactly {count} realistic but DIVERSE synthetic test scenarios "
+        "for testing a Kubernetes deployment health classifier. Each scenario is a "
+        "metrics snapshot the classifier would see. Include edge cases: borderline "
+        "error rates, high latency with zero errors, low traffic with high error rate, "
+        "very high traffic, near-zero traffic, etc. Do not just repeat the same shape.\n\n"
+        'Respond ONLY as a JSON array, each item: {"error_rate": <0-1 float>, '
+        '"p95_latency_seconds": <float>, "request_rate_per_sec": <float>, '
+        '"scenario_label": "<short description>"}'
+    )
+    for attempt in range(2):
+        try:
+            resp = groq_client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8,  # higher temp for scenario diversity
+                max_tokens=800,
+                response_format={"type": "json_object"},
+            )
+            raw = resp.choices[0].message.content.strip()
+            if not raw:
+                continue
+            raw_clean = raw.replace("```json", "").replace("```", "").strip()
+            data = json.loads(raw_clean)
+            # model may wrap in {"scenarios": [...]} or return a bare list
+            if isinstance(data, dict):
+                for v in data.values():
+                    if isinstance(v, list):
+                        return v
+                return []
+            if isinstance(data, list):
+                return data
+        except Exception:
+            continue
+    return []
+
+
+@app.post("/generate-test-scenarios", response_model=SyntheticScenariosResponse)
+def generate_test_scenarios(req: SyntheticScenariosRequest):
+    """AI-5: generates synthetic metric scenarios to test AI-1's classification range."""
+    scenarios = generate_synthetic_scenarios(req.count)
+    return SyntheticScenariosResponse(scenarios=scenarios)
