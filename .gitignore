@@ -2,3 +2,5 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+apps/ai-gate/.env
+.coverage

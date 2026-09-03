@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: ai-gate-check
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: ai-gate-decision
+      interval: 20s
+      count: 3
+      successCondition: result.decision == "promote"
+      failureLimit: 1
+      provider:
+        web:
+          url: http://10.110.159.116:8100/evaluate
+          method: POST
+          headers:
+            - key: Content-Type
+              value: application/json
+          body: '{"service": "{{args.service-name}}"}'
+          jsonPath: "{$}"
+          timeoutSeconds: 45

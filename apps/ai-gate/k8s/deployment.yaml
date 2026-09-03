@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-gate
+  labels:
+    app: ai-gate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-gate
+  template:
+    metadata:
+      labels:
+        app: ai-gate
+    spec:
+      containers:
+        - name: ai-gate
+          image: ai-gate:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8100
+          env:
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-gate-keys
+                  key: GROQ_API_KEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-gate-keys
+                  key: GEMINI_API_KEY
+            - name: PROMETHEUS_URL
+              value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8100
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-gate
+  labels:
+    app: ai-gate
+spec:
+  selector:
+    app: ai-gate
+  ports:
+    - port: 8100
+      targetPort: 8100
+      name: http

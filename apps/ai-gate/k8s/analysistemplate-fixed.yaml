@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate-check
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: error-rate
+      interval: 10s
+      count: 6
+      successCondition: result[0] < 0.1
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: http://10.111.140.247:9090
+          query: |
+            sum(rate(http_requests_total{service="{{args.service-name}}",status=~"5.."}[1m]))
+            /
+            sum(rate(http_requests_total{service="{{args.service-name}}"}[1m]))
+            or on() vector(0)
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: ai-gate-check
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: ai-gate-decision
+      interval: 20s
+      count: 3
+      successCondition: result.decision == "promote"
+      failureLimit: 1
+      provider:
+        web:
+          url: http://192.168.49.1:8100/evaluate
+          method: POST
+          headers:
+            - key: Content-Type
+              value: application/json
+          body: '{"service": "{{args.service-name}}"}'
+          jsonPath: "{$}"
+          timeoutSeconds: 45
