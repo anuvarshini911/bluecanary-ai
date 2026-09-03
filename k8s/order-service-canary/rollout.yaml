@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: order-service-canary
+  labels:
+    app: order-service-canary
+spec:
+  replicas: 4
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: order-service-canary
+  template:
+    metadata:
+      labels:
+        app: order-service-canary
+    spec:
+      containers:
+        - name: order-service
+          image: order-service:v2
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: APP_VERSION
+              value: "v2"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+  strategy:
+    canary:
+      canaryService: order-service-canary
+      steps:
+        - setWeight: 25
+        - analysis:
+            templates:
+              - templateName: error-rate-check
+            args:
+              - name: service-name
+                value: order-service-canary
+        - setWeight: 50
+        - pause: { duration: 15s }
+        - setWeight: 75
+        - pause: { duration: 15s }
+        - setWeight: 100
