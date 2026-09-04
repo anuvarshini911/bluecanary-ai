@@ -176,25 +176,27 @@ class JudgeResponse(BaseModel):
 
 
 def judge_with_gemini(req: "JudgeRequest") -> tuple[str, str]:
-    """AI-3: independent second opinion on a past AI Gate decision (quality/audit layer)."""
+    """AI-3 (per approved proposal): a second AI pass cross-checks every numeric
+    claim in AI-2's rationale text against the actual Prometheus snapshot. Flags
+    rationales that cite numbers inconsistent with the real metrics."""
     prompt = (
-        "You are an independent AI auditor reviewing a Kubernetes deployment gate's "
-        "decision. Be skeptical - your job is to catch mistakes, not rubber-stamp them.\n\n"
-        f"Service: {req.service}\n"
-        f"Metrics at the time: {json.dumps(req.metrics, indent=2)}\n"
-        f"Original classification: {req.ai1_classification}\n"
-        f"Original decision: {req.decision}\n"
-        f"Original rationale given: {req.rationale}\n\n"
-        "Independently assess: was this the right call given the metrics? "
-        'Respond ONLY as JSON: {"verdict": "agree|disagree", "reasoning": "<2-3 sentences>"}'
+        "You are a fact-checker. Below is a rationale written by another AI, and the "
+        "REAL metric values it was supposed to be describing. Your job: check every "
+        "specific number (percentages, ms, req/s, etc.) mentioned in the rationale "
+        "text against the real metrics. Flag ANY numeric claim that is wrong, "
+        "fabricated, or inconsistent with the real data - even small discrepancies.\n\n"
+        f"Real metrics: {json.dumps(req.metrics, indent=2)}\n"
+        f"Rationale text to check: \"{req.rationale}\"\n\n"
+        'Respond ONLY as JSON: {"verdict": "consistent|inconsistent", '
+        '"reasoning": "<list any numeric mismatches found, or confirm all numbers check out, 2-3 sentences>"}'
     )
     try:
         resp = gemini_model.generate_content(prompt)
         raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
         data = json.loads(raw)
-        return data.get("verdict", "agree"), data.get("reasoning", "")
+        return data.get("verdict", "consistent"), data.get("reasoning", "")
     except Exception as e:
-        return "agree", f"(Judge unavailable, defaulting to agree: {e})"
+        return "consistent", f"(Judge unavailable, defaulting to consistent: {e})"
 
 
 @app.post("/judge", response_model=JudgeResponse)
@@ -279,31 +281,28 @@ class NotifyResponse(BaseModel):
 
 
 def generate_notification(req: "NotifyRequest") -> str:
-    """AI-4: consolidates AI-1/AI-2/AI-3 output into one stakeholder-facing
-    notification message (e.g. for a Slack/team channel), using Groq for speed."""
+    """AI-4 (per approved proposal): outcome narration via Gemini - a one-paragraph
+    summary suitable for Slack/pipeline output after a rollout, composed via Gemini
+    (not Groq, per the approved tool assignment)."""
     prompt = (
-        "You write concise deployment notification messages for a team Slack channel. "
-        "Given this deployment gate result, write ONE short notification (3-4 lines max, "
-        "no markdown headers, plain conversational text a human would actually post):\n\n"
+        "Write a single, readable one-paragraph outcome narration for a Kubernetes "
+        "deployment gate result, suitable for posting to Slack or a CI/CD pipeline "
+        "log. This replaces a wall of raw logs with one narrative paragraph a human "
+        "can read in a few seconds.\n\n"
         f"Service: {req.service}\n"
         f"Metrics: {json.dumps(req.metrics)}\n"
         f"Classification: {req.ai1_classification}\n"
         f"Decision: {req.decision}\n"
         f"Rationale: {req.rationale or 'n/a'}\n"
-        f"Independent judge verdict: {req.judge_verdict or 'not yet reviewed'}\n\n"
-        "Include an appropriate emoji (✅ for promote, 🔴 for rollback) and keep it "
-        "brief and scannable."
+        f"Independent judge check: {req.judge_verdict or 'not yet reviewed'}\n\n"
+        "Write it as flowing prose (one paragraph, 3-5 sentences), not bullet points. "
+        "State what happened, why, and what a human should know."
     )
     try:
-        resp = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=200,
-        )
-        return resp.choices[0].message.content.strip()
+        resp = gemini_model.generate_content(prompt)
+        return resp.text.strip()
     except Exception as e:
-        return f"(Notification generation unavailable: {e})"
+        return f"(Narration unavailable: {e})"
 
 
 @app.post("/notify", response_model=NotifyResponse)
